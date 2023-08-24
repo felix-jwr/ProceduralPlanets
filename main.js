@@ -20,7 +20,7 @@ const startTime = performance.now();
 class Chunk extends THREE.Mesh {
     constructor(params) {
         const geometry = new THREE.PlaneGeometry(params.width, params.height, 128, 128);
-        const material = new THREE.MeshStandardMaterial({
+        const material = new THREE.MeshStandardMaterial({ 
             wireframe: false,
             color: params.color, // A part of me dies every time I type colour without a 'u'
             side: THREE.DoubleSide
@@ -33,13 +33,13 @@ class Chunk extends THREE.Mesh {
         this.receiveShadow = true;
         this.offset = params.offset;    // Store x, z offset in the chunk data
     }
-
+  
     setPosition(x, y, z) {
-        this.position.set(x, y, z);
+      this.position.set(x, y, z);
     }
-
+  
     setRotation(x, y, z) {
-        this.rotation.set(x, y, z);
+      this.rotation.set(x, y, z);
     }
 }
 
@@ -50,6 +50,7 @@ class ChunkManager {
         this.n = params.n;
         this.size = params.size;
         this.color = params.color;
+        this.yOffset = params.seaLevel;
         this.centralChunkPosition = params.centralChunkPosition;
         this.chunkParams = params.chunkParams;
         this.chunks = [];
@@ -60,8 +61,8 @@ class ChunkManager {
             this.modifyVerticesWithNoise(this.chunks[i], this.chunks[i].offset)
             this.scene.add(this.chunks[i]);
         }
-    }
-
+      }
+    
     // Generate a grid of chunks with side length n (floored to odd number)
     generateGrid() {
         const halfSize = Math.floor(this.n / 2);
@@ -69,9 +70,9 @@ class ChunkManager {
         for (let row = -halfSize; row <= halfSize; row++) {
 
             for (let col = -halfSize; col <= halfSize; col++) {
-                // TODO: Pass through chunk parameters as a whole thing
                 let currentChunkParams = this.chunkParams;
-
+                
+                // Modify chunk colour (temp)
                 if (col % 2 == 0 && row % 2 == 0) {
                     currentChunkParams.color = 0x0000FF
                 }
@@ -82,7 +83,7 @@ class ChunkManager {
                 const plane = new Chunk(currentChunkParams);
                 const xOffset = col * this.size + this.centralChunkPosition.x;
                 const zOffset = row * this.size + this.centralChunkPosition.y;
-                plane.setPosition(xOffset, 0, zOffset);
+                plane.setPosition(xOffset, -this.yOffset, zOffset);
                 plane.offset = new THREE.Vector2(xOffset, -zOffset);
                 this.chunks.push(plane);
             }
@@ -93,16 +94,16 @@ class ChunkManager {
     modifyVerticesWithNoise(chunk, offset) {
         const generator = new NoiseGenerator(noiseParams);
         const vertices = chunk.geometry.attributes.position.array;
-
+        
         // Loops through each vertex and applies the positional offset to get the noise value for that position
         for (let i = 0; i < vertices.length; i += 3) {
             const x = vertices[i];
             const y = vertices[i + 1];
             const result = generator.Get(x + offset.x, y + offset.y);
-
+    
             vertices[i + 2] = result;
         }
-
+    
         chunk.geometry.attributes.position.needsUpdate = true;
     }
 }
@@ -111,10 +112,10 @@ class ChunkManager {
 const size = 250;
 
 const chunkParams = {
-    size: size,
-    width: size,
-    height: size,
-    color: 0x567D46
+        size: size,
+        width: size,
+        height: size, 
+        color: 0x567D46
 };
 
 const chunkManagerParams = {
@@ -122,6 +123,7 @@ const chunkManagerParams = {
     n: 5,
     size: chunkParams.size,
     color: chunkParams.color,
+    seaLevel: 10,
     centralChunkPosition: new THREE.Vector2(0, 0),
     chunkParams: chunkParams
 }
@@ -140,6 +142,24 @@ const noiseParams = {
 
 // Generate the terrain
 const griddy = new ChunkManager(chunkManagerParams);
+
+// Generate ocean
+let seaChunkParams = {
+    size: chunkManagerParams.n * size,
+    color: 0x00DDFF
+}
+
+const seaChunk = new THREE.Mesh(
+    new THREE.PlaneGeometry(seaChunkParams.size, seaChunkParams.size),
+    new THREE.MeshStandardMaterial({ 
+            color: seaChunkParams.color,
+            transparent: true,
+            opacity: 0.85,
+            wireframe: false
+    }),
+);
+seaChunk.rotation.set(-Math.PI / 2, 0, 0);
+scene.add(seaChunk);
 
 // Output terrain generation time
 console.log(
