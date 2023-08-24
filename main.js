@@ -18,12 +18,13 @@ class Chunk extends THREE.Mesh {
     constructor(params) {
         const geometry = new THREE.PlaneGeometry(params.width, params.height, params.segments, params.segments);
         const material = new THREE.MeshStandardMaterial({ 
-            wireframe: false,
-            color: params.color, // A part of me dies every time I type colour without a 'u'
+            wireframe: false, 
+            vertexColors: true, // A part of me dies every time I type colour without a 'u'
             transparent: !(params.opacity == 1),
             opacity: params.opacity,
             side: (params.opacity == 1) ? THREE.DoubleSide : THREE.FrontSide
         });
+
         super(geometry, material);
 
         // Update chunk properties
@@ -67,7 +68,7 @@ class ChunkManager {
     generateSeaChunk() {
         // Remove existing sea chunk if one exists
         scene.remove(this.seaChunk);
-
+        
         // Update the sea chunk parameters
         const newSize = (this.n % 2 == 0) ? this.size * (this.n + 1) : this.size * this.n;
         this.seaChunkParams.size = newSize;
@@ -76,6 +77,15 @@ class ChunkManager {
 
         // Regenerate sea chunk
         this.seaChunk = new Chunk(this.seaChunkParams);
+
+        // Set sea chunk colour
+        const colours = [];
+        const colour = new THREE.Color(0x00DDFF);
+        for (let i = 0; i < this.seaChunk.geometry.attributes.position.count; i++) {
+            colours.push(colour.r, colour.g, colour.b);
+        }
+        this.seaChunk.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+                
         this.scene.add(this.seaChunk);
     }
     
@@ -101,31 +111,60 @@ class ChunkManager {
                 if (!chunkExists) {
                     const currentChunkParams = this.chunkParams;
 
-                    // Modify chunk colour (temp)
-                    if (col == 0 && row == 0) {
-                        currentChunkParams.color = 0xFFFFFF
-                    }
-                    else {
-                        currentChunkParams.color = 0x567D46
-                    }
-
                     // Create the chunk and add it to the scene
-                    const plane = new Chunk(currentChunkParams);
-                    plane.setPosition(xOffset, -this.yOffset, zOffset);
-                    plane.offset = new THREE.Vector2(xOffset, -zOffset);
-                    this.chunks.push(plane);
-                    this.scene.add(plane);
+                    const chunk = new Chunk(currentChunkParams);
+                    chunk.setPosition(xOffset, -this.yOffset, zOffset);
+                    chunk.offset = new THREE.Vector2(xOffset, -zOffset);
+                    this.chunks.push(chunk);
+                    this.scene.add(chunk);
                     
                     // Add noise to the chunk
-                    this.modifyVerticesWithNoise(plane, plane.offset);
+                    this.modifyVerticesWithNoise(chunk, chunk.offset);
+
+                    // Generate vertex colours for the chunk
+                    this.generateVertexColors(chunk.geometry);
                 }
             }
         }
 
         // (TEMP) Output terrain generation time
-        console.log(
-            `Time taken to generate surface: ${performance.now() - startTime} ms`
-        );
+        console.log(`Time taken to generate surface: ${performance.now() - startTime} ms`);
+    }
+
+    // Apply colour to each vertex of a chunk
+    generateVertexColors(geometry) {
+        const vertices = geometry.attributes.position.array;
+
+        const colours = [];
+
+
+        // Set vertex colour based on height
+        for (let i = 0; i < geometry.attributes.position.count; i++) {
+            const y = vertices[i * 3 + 2];
+            const colour = new THREE.Color();
+
+            if (y < 15) {
+                // Sandy beaches
+                colour.setHex(0xC2B280)
+            }
+            else if (y > 65) {
+                // Snowy peaks
+                colour.setHex(0xFFFFFF)
+            }
+            else if (y > 45) {
+                // Mountains
+                colour.setHex(0x808080)
+                
+            }
+            else {
+                // Normal terrain
+                colour.setHex(0x567D46)
+            }
+
+            colours.push(colour.r, colour.g, colour.b);
+        }
+    
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
     }
 
     // Change sea level
@@ -145,6 +184,7 @@ class ChunkManager {
 
         for (let i = 0; i < this.chunks.length; i++) {
             this.modifyVerticesWithNoise(this.chunks[i], this.chunks[i].offset)
+            this.generateVertexColors(this.chunks[i].geometry)
         }
     }
 
@@ -235,7 +275,6 @@ const chunkParams = {
         size: size,
         width: size,
         height: size, 
-        color: 0x567D46,
         opacity: 1,
         segments: segments
 };
@@ -246,7 +285,7 @@ const seaChunkParams = {
     width: seaChunkDims,
     height: seaChunkDims,
     color: 0x00DDFF,
-    opacity: 0.85,
+    opacity: 0.45,
     segments: 1
 };
 
@@ -267,7 +306,6 @@ const chunkManagerParams = {
     scene: scene,
     n: 5,
     size: chunkParams.size,
-    color: chunkParams.color,
     seaLevel: 10,
     centralChunkPosition: new THREE.Vector2(0, 0),
     seaChunkParams: seaChunkParams,
