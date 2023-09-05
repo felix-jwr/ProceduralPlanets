@@ -100,7 +100,7 @@ scene.add(ambientLight);
 
 // Create directional light and give it initial position
 const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1); // Colour: white, Intensity: 1
-const initialLightPos = new THREE.Vector3(250 * 105, 200, (250 * 2.5) + 250);   // Places light a bit outside one corner of the grid
+const initialLightPos = new THREE.Vector3(-400, 200, 1600);   // Places light a bit outside one corner of the grid
 directionalLight.position.set(initialLightPos.x, initialLightPos.y, initialLightPos.z);
 directionalLight.rotation.set(0, 0, 0);
 scene.add(directionalLight);
