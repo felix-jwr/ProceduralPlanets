@@ -23,35 +23,14 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableKeys = true;
 scene.add(camera);
 
-// quadtree test
-const quadTree = new QuadTree({
-    min: new THREE.Vector2(-32000, -32000),
-    max: new THREE.Vector2(32000, 32000),
-    minNodeSize: 250
-})
-console.log(quadTree);
-quadTree.insertObject(camera.position);
-console.log(quadTree);
-
 // Parameters
-const size = 250;
-const segments = 128;
-const seaChunkDims = size * 5; // Initial seaChunk dims = size * grid side length
-
-// Terrain parameters
-const chunkParams = {
-    size: size,
-    width: size,
-    height: size,
-    opacity: 1,
-    segments: segments
-};
+const quadTreeSize = 32000; // Initial seaChunk dims = size of whole quadTree
 
 // Ocean parameters
 const seaChunkParams = {
-    size: seaChunkDims,
-    width: seaChunkDims,
-    height: seaChunkDims,
+    size: quadTreeSize,
+    width: quadTreeSize,
+    height: quadTreeSize,
     color: 0x00DDFF,
     opacity: 0.45,
     segments: 1
@@ -72,17 +51,47 @@ const noiseParams = {
 // Chunk manager parameters
 const chunkManagerParams = {
     scene: scene,
-    n: 5,
-    size: chunkParams.size,
     seaLevel: 10,
-    camera: camera,
     seaChunkParams: seaChunkParams,
-    chunkParams: chunkParams,
     noiseParams: noiseParams
 }
 
 // Generate the terrain
 const chunkManager = new ChunkManager(chunkManagerParams);
+
+// Quadtree
+const startTime = performance.now();
+
+const quadTree = new QuadTree({
+    min: new THREE.Vector2(-quadTreeSize, -quadTreeSize),
+    max: new THREE.Vector2(quadTreeSize, quadTreeSize),
+    minNodeSize: 250
+})
+quadTree.insertObject(camera.position);
+
+// Draw plane for each square in quadtree
+const leaves = quadTree.getChildren();  // Gets each leaf node from the quadtree
+const maxSegments = 256;                // Maximum number of segements of a plane (resolution)
+
+for (let i = 0; i < leaves.length; i++) {
+    // Calculate the parameters for the current leaf
+    const currentQuadParams = {
+        size: leaves[i].size.x,
+        width: leaves[i].size.x,
+        height: leaves[i].size.x,
+        opacity: 1,
+        segments: Math.ceil(maxSegments / (leaves[i].size.x / 250))
+    }
+
+    // Copy offset
+    const xOffset = leaves[i].centre.x;
+    const zOffset = leaves[i].centre.y;
+
+    // Generate the plane
+    chunkManager.generateChunk(xOffset, zOffset, currentQuadParams);
+}
+
+console.log(`Time taken to generate quadtree surface: ${performance.now() - startTime} ms`);
 
 // Lighting
 // Create ambient light for base level illumination (soft white colour)
@@ -91,7 +100,7 @@ scene.add(ambientLight);
 
 // Create directional light and give it initial position
 const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1); // Colour: white, Intensity: 1
-const initialLightPos = new THREE.Vector3(size * chunkManagerParams.n + 100, 200, (size * (chunkManagerParams.n / 2)) + size);   // Places light a bit outside one corner of the grid
+const initialLightPos = new THREE.Vector3(250 * 105, 200, (250 * 2.5) + 250);   // Places light a bit outside one corner of the grid
 directionalLight.position.set(initialLightPos.x, initialLightPos.y, initialLightPos.z);
 directionalLight.rotation.set(0, 0, 0);
 scene.add(directionalLight);
@@ -125,7 +134,6 @@ const lightingParameters = {
 
 };
 const terrainParameters = {
-    gridSize: chunkManagerParams.n,
     octaves: 6,
     persistence: 0.707,
     lacunarity: 1.8,
@@ -152,13 +160,13 @@ lightingFolder.addColor(lightingParameters, "lightColour").onChange(function (va
 lightingFolder.add(lightingParameters, "lightIntensity", 0, 1).onChange(function (value) {
     directionalLight.intensity = value;
 });
-lightingFolder.add(lightingParameters, "lightPositionX", -(3 * size * chunkManagerParams.n), 3 * size * chunkManagerParams.n).onChange(function (value) {
+lightingFolder.add(lightingParameters, "lightPositionX", -3750, 3750).onChange(function (value) {
     directionalLight.position.x = value;
 });
 lightingFolder.add(lightingParameters, "lightPositionY", 1, 250).onChange(function (value) {
     directionalLight.position.y = value;
 });
-lightingFolder.add(lightingParameters, "lightPositionZ", -(3 * size * chunkManagerParams.n), 3 * size * chunkManagerParams.n).onChange(function (value) {
+lightingFolder.add(lightingParameters, "lightPositionZ", -3750, 3750).onChange(function (value) {
     directionalLight.position.z = value;
 });
 
@@ -167,10 +175,6 @@ lightingFolder.open();
 // GUI terrain settings
 const terrainFolder = gui.addFolder("Terrain");
 
-terrainFolder.add(terrainParameters, "gridSize", 1, 15).step(1).onChange(function (value) {
-    chunkManagerParams.n = value;
-    chunkManager.regenerateChunks(chunkManagerParams);
-})
 terrainFolder.add(terrainParameters, "octaves", 1, 10).step(1).onChange(function (value) {
     chunkManagerParams.noiseParams.octaves = value;
     chunkManager.updateNoiseGenerator(chunkManagerParams.noiseParams);

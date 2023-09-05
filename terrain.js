@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { NoiseGenerator } from "./noise.js";
 
 // Custom Chunk object
-class Chunk extends THREE.Mesh {
+export class Chunk extends THREE.Mesh {
     constructor(params) {
         const geometry = new THREE.PlaneGeometry(params.width, params.height, params.segments, params.segments);
         const material = new THREE.MeshStandardMaterial({
@@ -34,23 +34,14 @@ class Chunk extends THREE.Mesh {
 // Class for managing chunks including initial generation etc.
 export class ChunkManager {
     constructor(params) {
+        // Gather parameters
         this.scene = params.scene;
-        this.n = this.roundToOdd(params.n, "up"); // Push grid length up to nearest odd integer
-        this.size = params.size;
-        this.color = params.color;
-        this.yOffset = params.seaLevel;
-        this.initialCameraPosition = params.camera.position.clone();
-        this.chunkParams = params.chunkParams;
-        this.seaChunkParams = params.seaChunkParams;
         this.generator = new NoiseGenerator(params.noiseParams);
+        this.seaChunkParams = params.seaChunkParams;
+        this.yOffset = params.seaLevel;
+
+        // Store a list of all chunks in the scene
         this.chunks = [];
-
-        // Initial chunk
-        this.currentChunk = new Chunk(params.chunkParams);
-        this.currentChunk.boundaries = new THREE.Vector2(params.size / 2, params.size / 2);
-
-        // Generate grid and add chunks to scene
-        this.generateGrid();
 
         // Generate sea chunk
         this.generateSeaChunk();
@@ -62,12 +53,11 @@ export class ChunkManager {
     }
 
     // Generates a fresh sea chunk
-    generateSeaChunk() {
+    generateSeaChunk(newSize = this.seaChunkParams.size) {
         // Remove existing sea chunk if one exists
         this.scene.remove(this.seaChunk);
 
         // Update the sea chunk parameters
-        const newSize = (this.n % 2 == 0) ? this.size * (this.n + 1) : this.size * this.n;
         this.seaChunkParams.size = newSize;
         this.seaChunkParams.width = newSize;
         this.seaChunkParams.height = newSize;
@@ -87,14 +77,14 @@ export class ChunkManager {
         this.scene.add(this.seaChunk);
     }
 
-    generateChunk(xOffset, zOffset) {
+    generateChunk(xOffset, zOffset, defaultChunkParams = this.defaultChunkParams) {
         // Check if there's already a chunk there
         const chunkExists = this.findChunkAtPosition(xOffset, zOffset);
 
         // If chunk doesn't already exist, make a new one
         if (!chunkExists) {
             // Create the chunk and add it to the scene
-            const chunk = new Chunk(this.chunkParams);
+            const chunk = new Chunk(defaultChunkParams);
             chunk.setPosition(xOffset, -this.yOffset, zOffset);
             chunk.offset = new THREE.Vector2(xOffset, -zOffset);
             chunk.boundaries = new THREE.Vector2(chunk.offset.x + this.size / 2, chunk.offset.y + this.size / 2)
@@ -109,29 +99,6 @@ export class ChunkManager {
 
             return chunk;
         }
-    }
-
-    // Generate a grid of chunks with side length n (floored to odd number)
-    generateGrid() {
-        // (TEMP) Times terrain generation
-        const startTime = performance.now();
-
-        const halfSize = Math.floor(this.n / 2);
-        const centralPosition = this.initialCameraPosition;
-
-        for (let row = -halfSize; row <= halfSize; row++) {
-            for (let col = -halfSize; col <= halfSize; col++) {
-
-                // Calculate next chunk position
-                const xOffset = col * this.size + centralPosition.x;
-                const zOffset = row * this.size + centralPosition.z;
-
-                this.generateChunk(xOffset, zOffset);
-            }
-        }
-
-        // (TEMP) Output terrain generation time
-        console.log(`Time taken to generate surface: ${performance.now() - startTime} ms`);
     }
 
     // Apply colour to each vertex of a chunk
@@ -206,47 +173,6 @@ export class ChunkManager {
         chunk.geometry.attributes.position.needsUpdate = true;
     }
 
-    // If there's a change in parameters, regenerate the terrain
-    regenerateChunks(newParams) {
-        // Round up grid length to odd number
-        newParams.n = this.roundToOdd(newParams.n, "up");
-
-        // If the grid is getting smaller
-        if (newParams.n < this.n) {
-            this.pruneChunks(newParams);
-            this.n = newParams.n;
-            this.generateSeaChunk();
-        }
-        // If the grid is getting bigger
-        else if (newParams.n > this.n) {
-            this.n = newParams.n;
-            this.generateGrid();
-            this.generateSeaChunk();
-        }
-
-        // Update internal parameters
-        this.n = newParams.n;
-    }
-
-    // Remove chunks that are outside of a new grid size specified in newParams
-    pruneChunks(newParams) {
-        // Find the maximum offset we want to keep from the centre
-        const halfSize = Math.floor(newParams.n / 2);
-        const pruneOffset = this.size * halfSize;
-
-        // Iterate through the grid in reverse order and prune chunks that are outside the bounds of the new grid
-        for (let i = this.chunks.length - 1; i >= 0; i--) {
-            const chunk = this.chunks[i];
-            const xOutsideBounds = Math.abs(chunk.offset.x) > pruneOffset;
-            const yOutsideBounds = Math.abs(chunk.offset.y) > pruneOffset;
-
-            if (xOutsideBounds || yOutsideBounds) {
-                this.scene.remove(chunk);
-                this.chunks.splice(i, 1);
-            }
-        }
-    }
-
     // Checks to see if a chunk already exists at a given position
     findChunkAtPosition(xOffset, zOffset) {
         for (let i = 0; i < this.chunks.length; i++) {
@@ -256,14 +182,5 @@ export class ChunkManager {
         }
 
         return false;
-    }
-
-    // Round an even number to an odd number, rounds up by default
-    roundToOdd(value, direction = "up") {
-        if (direction == "up") {
-            return (value % 2 == 0) ? value + 1 : value;
-        } else if (direction == "down") {
-            return (value % 2 == 0) ? value - 1 : value;
-        }
     }
 }
